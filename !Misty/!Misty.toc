@@ -1,0 +1,8 @@
+## Interface: 60200
+## Title: !Misty
+## Notes: Your group assistant.
+## Version: 0.0.0.3
+## Author: Counsel
+## SavedVariables: Misty
+
+!Misty.lua
