@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.1.1 - Release 5a
+-- Version 0.0.1.2 - Release 6a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -45,14 +45,15 @@ function MistyTbl.utils.makeMovable(frame)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 end
 
-function MistyTbl.utils.buildList(MistyUI)
+function MistyTbl.utils.buildList(MistyUI, sender, message)
 	-- Get the text in each text box
-	local postText, postListText, text = MistyUI.postTextBox:GetText(), MistyUI.postListTextBox:GetText()
+	local postListText = MistyUI.postListTextBox:GetText()
+	local text = ""
 	-- Determine if the list box is empty to correctly handle new lines
 	if postListText == "" then
-		text = postText
+		text = sender..": "..message
 	else
-		text = postListText.."\n"..sender..": "..postText
+		text = postListText.."\n"..sender..": "..message
 	end
 	return text
 end
@@ -148,7 +149,8 @@ function Misty_Event_Handler(self, event, ...)
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX)
 		local prefix, message, channel, sender = ...
 		if prefix == MistyTbl.constants.ADDON_PREFIX and sender ~= MistyTbl.vars.playerFullName then
-			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI))
+			sender = Ambiguate(sender, "none")
+			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI, sender, message))
 			Misty.savedList = MistyUI.postListTextBox:GetText()
 		end
 	end
