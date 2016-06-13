@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.1.2 - Release 6a
+-- Version 0.0.2.0 - Release 7a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -31,8 +31,6 @@ local MistyTbl = {}
 MistyTbl.constants = {}
 MistyTbl.constants.ADDON_PREFIX = "Misty_msg"
 MistyTbl.vars = {}
-MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
-MistyTbl.vars.playerFullName = MistyTbl.vars.playerName.."-"..MistyTbl.vars.playerRealm
 
 -- Define utility functions
 MistyTbl.utils = {}
@@ -134,20 +132,22 @@ MistyUI.postListTextBox:SetBackdrop({
 })
 MistyUI.postListTextBox:Disable()
 
-MistyUI.postListScroll = CreateFrame('ScrollFrame', nil, MistyUI, 'UIPanelScrollFrameTemplate')
+MistyUI.postListScroll = CreateFrame('ScrollFrame', 'Post_List_Scroll', MistyUI, 'UIPanelScrollFrameTemplate')
 MistyUI.postListScroll:SetPoint('TOPLEFT', MistyUI.postBtn, 'BOTTOMLEFT', 0, -20)
 MistyUI.postListScroll:SetPoint('BOTTOMRIGHT', MistyUI, 'BOTTOMRIGHT', 0, 50)
 MistyUI.postListScroll:SetScrollChild(MistyUI.postListTextBox)
 
 -- Addon Event Handler
 function Misty_Event_Handler(self, event, ...)
-	if event == "ADDON_LOADED" and ... == "Misty" then
+	if event == "ADDON_LOADED" and ... == "!Misty" then
 		MistyUI.postListTextBox:SetText(Misty.savedList)
 		MistyUI:UnregisterEvent("ADDON_LOADED")
 	end
 	if event == "CHAT_MSG_ADDON" then
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX)
 		local prefix, message, channel, sender = ...
+		MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
+		print(MistyTbl.vars.playerName, MistyTbl.vars.playerRealm)
 		if prefix == MistyTbl.constants.ADDON_PREFIX and sender ~= MistyTbl.vars.playerFullName then
 			sender = Ambiguate(sender, "none")
 			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI, sender, message))
