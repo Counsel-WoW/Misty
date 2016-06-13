@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.2.0 - Release 7a
+-- Version 0.0.2.1 - Release 8a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -147,7 +147,6 @@ function Misty_Event_Handler(self, event, ...)
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX)
 		local prefix, message, channel, sender = ...
 		MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
-		print(MistyTbl.vars.playerName, MistyTbl.vars.playerRealm)
 		if prefix == MistyTbl.constants.ADDON_PREFIX and sender ~= MistyTbl.vars.playerFullName then
 			sender = Ambiguate(sender, "none")
 			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI, sender, message))
