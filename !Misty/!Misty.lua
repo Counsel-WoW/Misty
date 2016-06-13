@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.1.0 - Release 4a
+-- Version 0.0.1.1 - Release 5a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -13,10 +13,10 @@ SlashCmdList.FRAMESTK = function()
 end
 
 -- Addon slash commands
-SLASH_Misty1, SLASH_Misty2 = "/misty", "/mm"
+SLASH_MISTY1, SLASH_MISTY2 = "/misty", "/mm"
 
 -- Slash command handler
-SlashCmdList["Misty"] = function(arg)
+SlashCmdList["MISTY"] = function(arg)
 	if not Misty_UI_Frame:IsShown() then
 		Misty_UI_Frame:Show()
 	else
@@ -147,7 +147,6 @@ function Misty_Event_Handler(self, event, ...)
 	if event == "CHAT_MSG_ADDON" then
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX)
 		local prefix, message, channel, sender = ...
-		print(sender)
 		if prefix == MistyTbl.constants.ADDON_PREFIX and sender ~= MistyTbl.vars.playerFullName then
 			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI))
 			Misty.savedList = MistyUI.postListTextBox:GetText()
