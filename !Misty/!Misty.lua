@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.0.3 - Release 3a
+-- Version 0.0.1.0 - Release 4a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -30,7 +30,9 @@ local MistyTbl = {}
 -- Define string constants
 MistyTbl.constants = {}
 MistyTbl.constants.ADDON_PREFIX = "Misty_msg"
-MistyTbl.player = UnitFullName("player")
+MistyTbl.vars = {}
+MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
+MistyTbl.vars.playerFullName = MistyTbl.vars.playerName.."-"..MistyTbl.vars.playerRealm
 
 -- Define utility functions
 MistyTbl.utils = {}
@@ -43,17 +45,20 @@ function MistyTbl.utils.makeMovable(frame)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 end
 
-function MistyTbl.utils.postSubmitHandler(MistyUI)
+function MistyTbl.utils.buildList(MistyUI)
 	-- Get the text in each text box
-	local postText, postListText = MistyUI.postTextBox:GetText(), MistyUI.postListTextBox:GetText()
+	local postText, postListText, text = MistyUI.postTextBox:GetText(), MistyUI.postListTextBox:GetText()
 	-- Determine if the list box is empty to correctly handle new lines
 	if postListText == "" then
-		MistyUI.postListTextBox:SetText(postText)
+		text = postText
 	else
-		MistyUI.postListTextBox:SetText(postListText.."\n"..postText)
+		text = postListText.."\n"..sender..": "..postText
 	end
-	Misty.savedList = MistyUI.postListTextBox:GetText()
-	--SendChatMessage(postText, "WHISPER", "Common", MistyTbl.player)
+	return text
+end
+
+function MistyTbl.utils.postSubmitHandler(MistyUI, postText)
+	print('Message sent. Content:', postText)
 	SendAddonMessage(MistyTbl.constants.ADDON_PREFIX, postText, "GUILD")
 end	
 
@@ -100,7 +105,7 @@ MistyUI.postBtn:SetText("Submit")
 MistyUI.postBtn:SetNormalFontObject("GameFontNormal")
 MistyUI.postBtn:SetHighlightFontObject("GameFontHighlight")
 MistyUI.postBtn:SetScript("OnClick", function(self)
-	MistyTbl.utils.postSubmitHandler(self:GetParent())
+	MistyTbl.utils.postSubmitHandler(self:GetParent(), MistyUI.postTextBox:GetText())
 end)
 
 MistyUI.resetBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
@@ -142,8 +147,10 @@ function Misty_Event_Handler(self, event, ...)
 	if event == "CHAT_MSG_ADDON" then
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX)
 		local prefix, message, channel, sender = ...
-		if prefix == MistyTbl.constants.ADDON_PREFIX then
-			print(sender," says: ", message)
+		print(sender)
+		if prefix == MistyTbl.constants.ADDON_PREFIX and sender ~= MistyTbl.vars.playerFullName then
+			MistyUI.postListTextBox:SetText(MistyTbl.utils.buildList(MistyUI))
+			Misty.savedList = MistyUI.postListTextBox:GetText()
 		end
 	end
 end
