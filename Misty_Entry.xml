@@ -1,0 +1,53 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+	<Button name="Misty_postListEntry" hidden="true" virtual="true">
+		<Size>
+			<AbsDimension x="320" y="50" />
+		</Size>
+		<Layers>
+			<Layer>
+				<FontString name="$parentSender" justifyH="LEFT" inherits="GameFontHighlight">
+					<Size>
+						<AbsDimension x="100" y="24" />
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT">
+							<Offset>
+								<AbsDimension x="4" y="10" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+				<FontString name="$parentInfo" justifyH="LEFT" inherits="GameFontHighlight">
+					<Size>
+						<AbsDimension x="100" y="24" />
+					</Size>
+					<Anchors>
+						<Anchor point="TOPLEFT" relativePoint="BOTTOMLEFT" relativeTo="$parentSender">
+							<Offset>
+								<AbsDimension x="4" y="10" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		<Scipts>
+			<OnLoad>
+				getglobal(self:GetName().."BG"):Hide()
+			</OnLoad>
+			<OnClick>
+				<!-- -->
+			</OnClick>
+			<OnEnter>
+				getglobal(self:GetName().."BG"):Show()
+			</OnEnter>
+			<OnLeave>
+				getglobal(self:GetName().."BG"):Hide()
+			</OnLeave>
+		</Scipts>
+		<NormalTexture name="$parentBG">
+			<Color r="0" g="0" b="0" a="0" />
+		</NormalTexture>
+	</Button>
+</Ui>
