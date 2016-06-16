@@ -2,7 +2,7 @@
 ..\FrameXML\UI.xsd">
 	<Button name="Misty_postListEntry" hidden="true" virtual="true">
 		<Size>
-			<AbsDimension x="320" y="50" />
+			<AbsDimension x="350" y="90" />
 		</Size>
 		<Layers>
 			<Layer>
@@ -11,21 +11,21 @@
 						<AbsDimension x="100" y="24" />
 					</Size>
 					<Anchors>
-						<Anchor point="LEFT">
+						<Anchor point="TOPLEFT">
 							<Offset>
-								<AbsDimension x="4" y="10" />
+								<AbsDimension x="4" y="-4" />
 							</Offset>
 						</Anchor>
 					</Anchors>
 				</FontString>
 				<FontString name="$parentInfo" justifyH="LEFT" inherits="GameFontHighlight">
 					<Size>
-						<AbsDimension x="100" y="24" />
+						<AbsDimension x="350" y="64" />
 					</Size>
 					<Anchors>
 						<Anchor point="TOPLEFT" relativePoint="BOTTOMLEFT" relativeTo="$parentSender">
 							<Offset>
-								<AbsDimension x="4" y="10" />
+								<AbsDimension x="0" y="0" />
 							</Offset>
 						</Anchor>
 					</Anchors>

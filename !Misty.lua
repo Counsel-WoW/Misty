@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.3.0 - Release -8a
+-- Version 0.0.4.0 - Release 9a
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -31,9 +31,13 @@ local MistyTbl = {}
 MistyTbl.constants = {}
 MistyTbl.constants.ADDON_PREFIX = "Misty_msg"
 MistyTbl.constants.MAX_ENTRIES = 4
+-- Set the maximum length of a post to the maximum length of a character name subtracted from the maximum length of a message
+MistyTbl.constants.MAX_LETTERS = 255 - 12
 MistyTbl.vars = {}
 
--- Define utility functions
+-- Define the table to contain the functions for the list
+MistyTbl.list = {}
+-- Define the table to contain utility functions
 MistyTbl.utils = {}
 
 function MistyTbl.utils.makeMovable(frame)
@@ -46,10 +50,9 @@ end
 
 function MistyTbl.utils.postSubmitHandler(MistyUI, postText)
 	SendAddonMessage(MistyTbl.constants.ADDON_PREFIX, postText, "GUILD")
-	print('Message sent.')
 end
 
-function MistyTbl.utils.init(MistyUI)
+function MistyTbl.list.init(MistyUI)
 	-- Load Saved Variables
 	if not Misty then
 		Misty = {}
@@ -66,18 +69,18 @@ function MistyTbl.utils.init(MistyUI)
 			entry:SetPoint("TOP", "Misty_postListEntry"..(i - 1), "BOTTOM")
 		end
 	end
-	MistyTbl.utils.UpdateEntries(MistyUI)
+	MistyTbl.list.UpdateEntries(MistyUI)
 end
 
-function MistyTbl.utils.addPost(MistyUI, sender)
+function MistyTbl.list.addPost(MistyUI, sender)
 	local index = #Misty.posts + 1
 	Misty.posts[index] = {}
 	Misty.posts[index].sender = sender
 	Misty.posts[index].info = MistyUI.postTextBox:GetText()
-	MistyTbl.utils.UpdateEntries(MistyUI)
+	MistyTbl.list.UpdateEntries(MistyUI)
 end
 
-function MistyTbl.utils.UpdateEntries(MistyUI)
+function MistyTbl.list.UpdateEntries(MistyUI)
 	for i = 1, MistyTbl.constants.MAX_ENTRIES do
 		local entry = Misty.posts[i]
 		local frame = getglobal("Misty_postListEntry"..i)
@@ -91,7 +94,7 @@ function MistyTbl.utils.UpdateEntries(MistyUI)
 	end
 end
 
-function MistyTbl.utils.resetList(MistyUI)
+function MistyTbl.list.resetList(MistyUI)
 	if Misty.posts[1] then
 		for i = 1, MistyTbl.constants.MAX_ENTRIES do
 			local frame = getglobal("Misty_postListEntry"..i)
@@ -102,18 +105,26 @@ function MistyTbl.utils.resetList(MistyUI)
 	end
 	Misty.posts = {}
 	MistyUI.posts = {}
-	print('reset')
+	MistyTbl.utils.speak('The list has been reset.')
 end
 
-for i = 1, NUM_CHAT_WINDOWS do
-	_G["ChatFrame"..i.."EditBox"]:SetAltArrowKeyMode(false)
+function MistyTbl.utils.classColour(unit)
+	local class, classFileName = UnitClass(Ambiguate(unit, "none"))
+	local colour = RAID_CLASS_COLORS[classFileName]
+	local formattedClassText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..unit..'|r'
+	return formattedClassText
 end
 
+function MistyTbl.utils.speak(text)
+	local colour = RAID_CLASS_COLORS["MONK"]
+	local formattedText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..'Misty|r'
+	print(formattedText..' says: '..text)
+end
 
 -- Define the frame table which will be used to store everything to be used in it
 
 local MistyUI = CreateFrame("Frame", "Misty_UI_Frame", UIParent, "BasicFrameTemplateWithInset")
-MistyUI:SetSize(400, 500)
+MistyUI:SetSize(400, 600)
 MistyUI:SetPoint("CENTER", UIParent, "CENTER")
 MistyUI.title = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 MistyUI.title:SetPoint("CENTER", MistyUI.TitleBg, "CENTER", 5, 0)
@@ -124,17 +135,18 @@ MistyTbl.utils.makeMovable(MistyUI)
 MistyUI.posts = {}
 
 MistyUI.postTextBoxLabel = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-MistyUI.postTextBoxLabel:SetPoint("LEFT", MistyUI.TitleBg, "BOTTOMLEFT", 0, -40)
-MistyUI.postTextBoxLabel:SetSize(100, 40)
+MistyUI.postTextBoxLabel:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT", 17, -10)
+MistyUI.postTextBoxLabel:SetSize(70, 40)
 MistyUI.postTextBoxLabel:SetText("Enter Post:")
 
 MistyUI.postTextBox = CreateFrame("EditBox", nil, MistyUI, "InputBoxTemplate")
-MistyUI.postTextBox:SetPoint("RIGHT", MistyUI.TitleBg, "BOTTOMRIGHT", 0, -40)
-MistyUI.postTextBox:SetSize(220, 20)
+MistyUI.postTextBox:SetPoint("LEFT", MistyUI.postTextBoxLabel, "RIGHT", 20, 0)
+MistyUI.postTextBox:SetSize(270, 20)
 MistyUI.postTextBox:SetAutoFocus(false)
+MistyUI.postTextBox:SetMaxLetters(MistyTbl.constants.MAX_LETTERS)
 
 MistyUI.postBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
-MistyUI.postBtn:SetPoint("TOPLEFT", MistyUI.postTextBoxLabel, "BOTTOMLEFT", 15, -10)
+MistyUI.postBtn:SetPoint("TOPLEFT", MistyUI.postTextBoxLabel, "BOTTOMLEFT", 0, -10)
 MistyUI.postBtn:SetSize(140, 30)
 MistyUI.postBtn:SetText("Submit")
 MistyUI.postBtn:SetNormalFontObject("GameFontNormal")
@@ -150,13 +162,13 @@ MistyUI.resetBtn:SetText("Reset")
 MistyUI.resetBtn:SetNormalFontObject("GameFontNormal")
 MistyUI.resetBtn:SetHighlightFontObject("GameFontHighlight")
 MistyUI.resetBtn:SetScript("OnClick", function(self)
-	MistyTbl.utils.resetList(MistyUI)
+	MistyTbl.list.resetList(MistyUI)
 end)
 
 MistyUI.postList = CreateFrame("Frame", nil, MistyUI)
 MistyUI.postList:SetPoint("TOPLEFT", MistyUI.postListScroll, "TOPLEFT", 0, 0)
 MistyUI.postList:SetPoint('TOPLEFT', MistyUI.postBtn, 'BOTTOMLEFT', 0, -20)
-MistyUI.postList:SetPoint('BOTTOMRIGHT', MistyUI, 'BOTTOMRIGHT', -20, 150)
+MistyUI.postList:SetPoint('BOTTOMRIGHT', MistyUI, 'BOTTOMRIGHT', -20, 90)
 MistyUI.postList:SetBackdrop({ 
   bgFile = "Interface/ACHIEVEMENTFRAME/UI-Achievement-Parchment-Horizontal", 
   edgeFile = "Interface/Tooltips/UI-Tooltip-Border", tile = false, tileSize = 16, edgeSize = 16, 
@@ -166,7 +178,7 @@ MistyUI.postList:SetBackdrop({
 -- Addon Event Handler
 function Misty_Event_Handler(self, event, ...)
 	if event == "ADDON_LOADED" and ... == "!Misty" then
-		MistyTbl.utils.init(MistyUI)
+		MistyTbl.list.init(MistyUI)
 		MistyUI:UnregisterEvent("ADDON_LOADED")
 	end
 	if event == "CHAT_MSG_ADDON" then
@@ -174,9 +186,13 @@ function Misty_Event_Handler(self, event, ...)
 		local prefix, message, channel, sender = ...
 		MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
 		MistyTbl.vars.playerFullName = MistyTbl.vars.playerName..'-'..MistyTbl.vars.playerRealm
-		if prefix == MistyTbl.constants.ADDON_PREFIX and sender == MistyTbl.vars.playerFullName then
-			sender = Ambiguate(sender, "none")
-			MistyTbl.utils.addPost(MistyUI, sender)
+		if prefix == MistyTbl.constants.ADDON_PREFIX then
+			local colouredClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
+			if sender ~= MistyTbl.vars.playerFullName then
+				MistyTbl.list.addPost(MistyUI, colouredClass)
+			else
+				MistyTbl.utils.speak('Message successfully sent.')
+			end
 		end
 	end
 end
