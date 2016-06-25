@@ -6,4 +6,3 @@
 ## SavedVariables: Misty
 
 !Misty.lua
-Misty_Entry.xml
