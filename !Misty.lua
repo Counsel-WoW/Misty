@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.0.4.0 - Release 9a
+-- Version 0.1.0.0 - Build 1-1
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -29,11 +29,13 @@ local MistyTbl = {}
 
 -- Define string constants
 MistyTbl.constants = {}
+MistyTbl.constants.UI_TITLE = "Misty - Version 0.1.0.0b"
 MistyTbl.constants.ADDON_PREFIX = "Misty_msg"
-MistyTbl.constants.MAX_ENTRIES = 4
 -- Set the maximum length of a post to the maximum length of a character name subtracted from the maximum length of a message
 MistyTbl.constants.MAX_LETTERS = 255 - 12
+MistyTbl.constants.LIST_LIMIT = 5
 MistyTbl.vars = {}
+MistyTbl.vars.currPage = 1
 
 -- Define the table to contain the functions for the list
 MistyTbl.list = {}
@@ -49,7 +51,11 @@ function MistyTbl.utils.makeMovable(frame)
 end
 
 function MistyTbl.utils.postSubmitHandler(MistyUI, postText)
-	SendAddonMessage(MistyTbl.constants.ADDON_PREFIX, postText, "GUILD")
+	if postText ~= "" then
+		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX, postText, "GUILD")
+	else
+		UIErrorsFrame:AddMessage('Warning. Empty message not sent.', 1.0, 1.0, 1.0, 5.0)
+	end
 end
 
 function MistyTbl.list.init(MistyUI)
@@ -57,50 +63,59 @@ function MistyTbl.list.init(MistyUI)
 	if not Misty then
 		Misty = {}
 		Misty.posts = {}
-	end
-
-	do
-		local entry = CreateFrame("Button", "Misty_postListEntry1", MistyUI.postList, "Misty_postListEntry")
-		entry:SetID(1)
-		entry:SetPoint("TOPLEFT", 4, 0)
-		for i = 2, MistyTbl.constants.MAX_ENTRIES do
-			local entry = CreateFrame("Button", "Misty_postListEntry"..i, MistyUI.postList, "Misty_postListEntry")
-			entry:SetID(i)
-			entry:SetPoint("TOP", "Misty_postListEntry"..(i - 1), "BOTTOM")
+	end	
+	
+	MistyUI.postEntries = {}
+	for i = 1, MistyTbl.constants.LIST_LIMIT do
+		MistyUI.postEntries[i] = CreateFrame("Button", "MistyUI_Entry"..i, MistyUI.postList)
+		MistyUI.postEntries[i]:SetWidth(346)
+		MistyUI.postEntries[i]:SetHeight(60)
+		MistyUI.postEntries[i]:SetNormalFontObject("GameFontNormal")
+		MistyUI.postEntries[i]:SetHighlightFontObject("GameFontHighlight")
+		MistyUI.postEntries[i]:SetBackdrop({ 
+			bgFile = "Interface/Buttons/UI-SliderBar-Background"
+		})
+		if i > 1 then
+			MistyUI.postEntries[i]:SetPoint("TOPLEFT", MistyUI.postEntries[i - 1], "BOTTOMLEFT")
+		else
+			MistyUI.postEntries[i]:SetPoint("TOPLEFT", MistyUI.postList, "TOPLEFT", 2, -1)
 		end
 	end
-	MistyTbl.list.UpdateEntries(MistyUI)
+	MistyTbl.list.UpdateEntries(MistyUI, 1)
 end
 
-function MistyTbl.list.addPost(MistyUI, sender)
+function MistyTbl.list.addPost(MistyUI, sender, message)
 	local index = #Misty.posts + 1
 	Misty.posts[index] = {}
 	Misty.posts[index].sender = sender
-	Misty.posts[index].info = MistyUI.postTextBox:GetText()
-	MistyTbl.list.UpdateEntries(MistyUI)
+	Misty.posts[index].message = MistyUI.postTextBox:GetText()
+	-- Check if the user is currently viewing the last page of the list
+	if (MistyTbl.vars.currPage * MistyTbl.constants.LIST_LIMIT) >= #Misty.posts then
+		-- If so, trigger the update of the next free button
+		MistyTbl.list.UpdateEntry(MistyUI, sender, message)
+	end
 end
 
-function MistyTbl.list.UpdateEntries(MistyUI)
-	for i = 1, MistyTbl.constants.MAX_ENTRIES do
-		local entry = Misty.posts[i]
-		local frame = getglobal("Misty_postListEntry"..i)
-		if entry then
-			getglobal(frame:GetName().."Sender"):SetText(entry.sender)
-			getglobal(frame:GetName().."Info"):SetText(entry.info)
-			frame:Show()
-		else
-			frame:Hide()
-		end
+function MistyTbl.list.UpdateEntry(MistyUI, sender, message)
+	-- Determine the next free button by using the remainder (between 1 and the limit) as the index
+	local index = #Misty.posts % MistyTbl.constants.LIST_LIMIT
+	-- If the net free button is the fifth, the remainder would be 0, so set the index to 5
+	if index == 0 then
+		index = 5
+	end
+	MistyUI.postEntries[index]:SetText(sender..'\n'..message)
+end
+
+function MistyTbl.list.UpdateEntries(MistyUI, startIndex)
+	for i = startIndex, MistyTbl.constants.LIST_LIMIT do
+		MistyUI.postEntries[i]:SetText(Misty.posts[i].sender..'\n'..Misty.posts[i].message)
 	end
 end
 
 function MistyTbl.list.resetList(MistyUI)
 	if Misty.posts[1] then
-		for i = 1, MistyTbl.constants.MAX_ENTRIES do
-			local frame = getglobal("Misty_postListEntry"..i)
-			getglobal(frame:GetName().."Sender"):SetText()
-			getglobal(frame:GetName().."Info"):SetText()
-			frame:Hide()
+		for i = 1, MistyTbl.constants.LIST_LIMIT do
+			MistyUI.postEntries[i]:SetText()
 		end
 	end
 	Misty.posts = {}
@@ -128,7 +143,7 @@ MistyUI:SetSize(400, 600)
 MistyUI:SetPoint("CENTER", UIParent, "CENTER")
 MistyUI.title = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 MistyUI.title:SetPoint("CENTER", MistyUI.TitleBg, "CENTER", 5, 0)
-MistyUI.title:SetText("Misty UI")
+MistyUI.title:SetText(MistyTbl.constants.UI_TITLE)
 MistyUI:RegisterEvent("ADDON_LOADED")
 MistyUI:RegisterEvent("CHAT_MSG_ADDON")
 MistyTbl.utils.makeMovable(MistyUI)
@@ -165,10 +180,10 @@ MistyUI.resetBtn:SetScript("OnClick", function(self)
 	MistyTbl.list.resetList(MistyUI)
 end)
 
-MistyUI.postList = CreateFrame("Frame", nil, MistyUI)
-MistyUI.postList:SetPoint("TOPLEFT", MistyUI.postListScroll, "TOPLEFT", 0, 0)
-MistyUI.postList:SetPoint('TOPLEFT', MistyUI.postBtn, 'BOTTOMLEFT', 0, -20)
-MistyUI.postList:SetPoint('BOTTOMRIGHT', MistyUI, 'BOTTOMRIGHT', -20, 90)
+MistyUI.postList = CreateFrame("Frame", "Post_List_Frame", MistyUI)
+MistyUI.postList:SetWidth(350)
+MistyUI.postList:SetHeight(300)
+MistyUI.postList:SetPoint("TOPLEFT", MistyUI.postBtn, "BOTTOMLEFT", 0, -20)
 MistyUI.postList:SetBackdrop({ 
   bgFile = "Interface/ACHIEVEMENTFRAME/UI-Achievement-Parchment-Horizontal", 
   edgeFile = "Interface/Tooltips/UI-Tooltip-Border", tile = false, tileSize = 16, edgeSize = 16, 
@@ -187,9 +202,9 @@ function Misty_Event_Handler(self, event, ...)
 		MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
 		MistyTbl.vars.playerFullName = MistyTbl.vars.playerName..'-'..MistyTbl.vars.playerRealm
 		if prefix == MistyTbl.constants.ADDON_PREFIX then
-			local colouredClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
-			if sender ~= MistyTbl.vars.playerFullName then
-				MistyTbl.list.addPost(MistyUI, colouredClass)
+			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
+			if sender == MistyTbl.vars.playerFullName then
+				MistyTbl.list.addPost(MistyUI, colouredByClass, message)
 			else
 				MistyTbl.utils.speak('Message successfully sent.')
 			end
@@ -197,4 +212,4 @@ function Misty_Event_Handler(self, event, ...)
 	end
 end
 MistyUI:SetScript("OnEvent", Misty_Event_Handler)
-MistyUI:Hide()
+--MistyUI:Hide()
