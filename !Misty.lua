@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.1.0.0 - Build 1-3
+-- Version 0.1.0.0 - Build 1-4
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -29,57 +29,75 @@ local MistyTbl = {}
 
 -- Define string constants
 MistyTbl.constants = {}
-MistyTbl.constants.UI_TITLE = "Misty - Version 0.1.0.0b"
-MistyTbl.constants.ADDON_PREFIX_INITIAL = "Misty_i"
-MistyTbl.constants.ADDON_PREFIX_REQ_META = "Misty_r_m"
-MistyTbl.constants.ADDON_PREFIX_SEND_META = "Misty_s_m"
+MistyTbl.constants.UI_TITLE = " - Version 0.1.0.0b"
+MistyTbl.constants.ADDON_PREFIX_POST = "Misty_p"
 MistyTbl.constants.ADDON_PREFIX_DELETE = "Misty_d"
 MistyTbl.constants.ADDON_PREFIX_EDIT = "Misty_e"
--- Set the maximum length of a post to the maximum length of a character name subtracted from the maximum length of a message
-MistyTbl.constants.MAX_LETTERS = 255 - 12
+MistyTbl.constants.ADDON_PREFIX_GATHER = "Misty_g"
+MistyTbl.constants.ADDON_PREFIX_COLLECT = "Misty_c"
+-- Set the maximum length of a post to the maximum length of a character name and the length of the post IDs being generated subtracted from the maximum length of a message: 255 - 12 - 10
+MistyTbl.constants.MAX_LETTERS = 233
 MistyTbl.constants.LIST_LIMIT = 4
+-- Dimension Constants
+MistyTbl.constants.SMALL_BUTTON_WIDTH = 80
+MistyTbl.constants.SMALL_BUTTON_HEIGHT = 25
+MistyTbl.constants.LARGE_BUTTON_WIDTH = 140
+MistyTbl.constants.LARGE_BUTTON_HEIGHT = 30
+
 MistyTbl.vars = {}
--- The current page in the list of entries
-MistyTbl.vars.currPage = 1
--- The total pages in the list of entries
-MistyTbl.vars.totalPages = 1
--- The variable to temporarily store the ID generated when the user clicks submit for a message
-MistyTbl.vars.id = ''
+-- The current page in the main list of entries
+MistyTbl.vars.mainCurrPage = 1
+-- The total pages in the main list of entries
+MistyTbl.vars.mainTotalPages = 1
+-- The current page in the user's posts list of entries
+MistyTbl.vars.userCurrPage = 1
+-- The total pages in the user's posts list of entries
+MistyTbl.vars.userTotalPages = 1
+-- Variables to hold the various versions of the user's character's name
 MistyTbl.vars.playerName, MistyTbl.vars.playerRealm, MistyTbl.vars.playerFullName = '', '', ''
-MistyTbl.vars.currEdit = {}
+-- Variable to hold the index of the post being edited
 MistyTbl.vars.editIndex = 0
+-- Flag to track if Misty is gathering posts from a user
+MistyTbl.vars.collecting = false
 
 -- Define the table to contain the functions for the list
 MistyTbl.list = {}
--- Initialise the table to temporarily store the initial message received from another client
-MistyTbl.temp = {}
-MistyTbl.temp[1] = {}
--- The variable used to flag the addon as waiting for metadata for a message from another client
-MistyTbl.request = false
 -- Define the table to contain utility functions
 MistyTbl.utils = {}
 
 function MistyTbl.list.init(MistyUI)
 	-- Load Saved Variables
-	if not Misty then
+	if not Misty or not Misty.options then
 		Misty = {}
+		Misty.options = {}
+		Misty.options.collect = false
 		Misty.posts = {}
+		Misty.userPosts = {}
 	end	
 	
+	if Misty.options.collect then
+		MistyUI.gatherCheckBtn:SetChecked(true)
+	end
+	
 	MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
+	if MistyTbl.vars.playerRealm == nil then
+		MistyTbl.vars.playerRealm = GetRealmName()
+	end
 	MistyTbl.vars.playerFullName = MistyTbl.vars.playerName..'-'..MistyTbl.vars.playerRealm
 	
 	MistyUI.postEntries = {}
+	MistyUI.userPostEntries = {}
 	for i = 1, MistyTbl.constants.LIST_LIMIT do
 		MistyUI.postEntries[i] = CreateFrame("Button", "MistyUI_Entry"..i, MistyUI.postList)
 		MistyUI.postEntries[i]:SetWidth(341)
 		MistyUI.postEntries[i]:SetHeight(110)
-		MistyUI.postEntries[i].sender = MistyUI.postEntries[i]:CreateFontString(MistyUI.postEntries[i]:GetName()..'sender', "OVERLAY", "GameFontHighlight")
-		MistyUI.postEntries[i].sender:SetPoint("TOPLEFT", MistyUI.postEntries[i], "TOPLEFT", 10, -7)
-		MistyUI.postEntries[i].sender:SetSize(325, 10)
-		MistyUI.postEntries[i].sender:SetJustifyH("LEFT")
+		MistyUI.postEntries[i].sender = nil
+		MistyUI.postEntries[i].character = MistyUI.postEntries[i]:CreateFontString(MistyUI.postEntries[i]:GetName()..'character', "OVERLAY", "GameFontHighlight")
+		MistyUI.postEntries[i].character:SetPoint("TOPLEFT", MistyUI.postEntries[i], "TOPLEFT", 10, -7)
+		MistyUI.postEntries[i].character:SetSize(325, 10)
+		MistyUI.postEntries[i].character:SetJustifyH("LEFT")
 		MistyUI.postEntries[i].message = MistyUI.postEntries[i]:CreateFontString(MistyUI.postEntries[i]:GetName()..'message', "OVERLAY", "GameFontHighlight")
-		MistyUI.postEntries[i].message:SetPoint("TOPLEFT", MistyUI.postEntries[i].sender, "BOTTOMLEFT", 2, -10)
+		MistyUI.postEntries[i].message:SetPoint("TOPLEFT", MistyUI.postEntries[i].character, "BOTTOMLEFT", 2, -10)
 		MistyUI.postEntries[i].message:SetSize(325, 75)
 		MistyUI.postEntries[i].message:SetJustifyH("LEFT")
 		MistyUI.postEntries[i]:SetNormalFontObject("GameFontNormal")
@@ -92,166 +110,276 @@ function MistyTbl.list.init(MistyUI)
 		else
 			MistyUI.postEntries[i]:SetPoint("TOPLEFT", MistyUI.postList, "TOPLEFT", 4, -4)
 		end
-		MistyUI.postEntries[i].editBtn = CreateFrame("Button", "MistyUI_Entry_EditBtn"..i, MistyUI.postList, "GameMenuButtonTemplate")
-		MistyUI.postEntries[i].editBtn:SetWidth(60)
-		MistyUI.postEntries[i].editBtn:SetHeight(30)
-		MistyUI.postEntries[i].editBtn:SetText('Edit')
-		MistyUI.postEntries[i].editBtn:SetPoint("TOPLEFT", MistyUI.postEntries[i], "TOPRIGHT", 5, -20)
-		MistyUI.postEntries[i].editBtn:SetNormalFontObject("GameFontNormal")
-		MistyUI.postEntries[i].editBtn:SetHighlightFontObject("GameFontHighlight")
-		MistyUI.postEntries[i].editBtn:SetScript("OnClick", function(self)
-			MistyTbl.vars.editIndex = MistyUI.postEntries[i].postIndex
-			MistyTbl.list.displayEdit(MistyUI, MistyUI.postEntries[i])
+		
+		-- User Post Entries
+		
+		MistyUI.userPostEntries[i] = CreateFrame("Button", "MistyUI_Entry"..i, MistyUI.userPostList)
+		MistyUI.userPostEntries[i]:SetWidth(341)
+		MistyUI.userPostEntries[i]:SetHeight(110)
+		MistyUI.userPostEntries[i].sender = nil
+		MistyUI.userPostEntries[i].character = MistyUI.userPostEntries[i]:CreateFontString(MistyUI.userPostEntries[i]:GetName()..'character', "OVERLAY", "GameFontHighlight")
+		MistyUI.userPostEntries[i].character:SetPoint("TOPLEFT", MistyUI.userPostEntries[i], "TOPLEFT", 10, -7)
+		MistyUI.userPostEntries[i].character:SetSize(325, 10)
+		MistyUI.userPostEntries[i].character:SetJustifyH("LEFT")
+		MistyUI.userPostEntries[i].message = MistyUI.userPostEntries[i]:CreateFontString(MistyUI.userPostEntries[i]:GetName()..'message', "OVERLAY", "GameFontHighlight")
+		MistyUI.userPostEntries[i].message:SetPoint("TOPLEFT", MistyUI.userPostEntries[i].character, "BOTTOMLEFT", 2, -10)
+		MistyUI.userPostEntries[i].message:SetSize(325, 75)
+		MistyUI.userPostEntries[i].message:SetJustifyH("LEFT")
+		MistyUI.userPostEntries[i]:SetNormalFontObject("GameFontNormal")
+		MistyUI.userPostEntries[i]:SetHighlightFontObject("GameFontHighlight")
+		MistyUI.userPostEntries[i]:SetBackdrop({ 
+			bgFile = "Interface/Buttons/UI-SliderBar-Background"
+		})
+		if i > 1 then
+			MistyUI.userPostEntries[i]:SetPoint("TOPLEFT", MistyUI.userPostEntries[i - 1], "BOTTOMLEFT", 0, -2)
+		else
+			MistyUI.userPostEntries[i]:SetPoint("TOPLEFT", MistyUI.userPostList, "TOPLEFT", 4, -4)
+		end
+		MistyUI.userPostEntries[i].editBtn = CreateFrame("Button", "MistyUI_Entry_EditBtn"..i, MistyUI.userPostList, "GameMenuButtonTemplate")
+		MistyUI.userPostEntries[i].editBtn:SetWidth(60)
+		MistyUI.userPostEntries[i].editBtn:SetHeight(30)
+		MistyUI.userPostEntries[i].editBtn:SetText('Edit')
+		MistyUI.userPostEntries[i].editBtn:SetPoint("TOPLEFT", MistyUI.userPostEntries[i], "TOPRIGHT", 5, -20)
+		MistyUI.userPostEntries[i].editBtn:SetNormalFontObject("GameFontNormal")
+		MistyUI.userPostEntries[i].editBtn:SetHighlightFontObject("GameFontHighlight")
+		MistyUI.userPostEntries[i].editBtn:SetScript("OnClick", function(self)
+			MistyTbl.vars.editIndex = MistyUI.userPostEntries[i].postIndex
+			MistyTbl.list.displayEdit(MistyUI, MistyUI.userPostEntries[i])
+			MistyUI.postTextBox:ClearFocus()
 		end)
-		MistyUI.postEntries[i].editBtn:Disable()
-		MistyUI.postEntries[i].deleteBtn = CreateFrame("Button", "MistyUI_Entry_EditBtn"..i, MistyUI.postList, "GameMenuButtonTemplate")
-		MistyUI.postEntries[i].deleteBtn:SetWidth(60)
-		MistyUI.postEntries[i].deleteBtn:SetHeight(30)
-		MistyUI.postEntries[i].deleteBtn:SetText('Delete')
-		MistyUI.postEntries[i].deleteBtn:SetPoint("TOPLEFT", MistyUI.postEntries[i].editBtn, "BOTTOMLEFT", 0, -10)
-		MistyUI.postEntries[i].deleteBtn:SetNormalFontObject("GameFontNormal")
-		MistyUI.postEntries[i].deleteBtn:SetHighlightFontObject("GameFontHighlight")
-		MistyUI.postEntries[i].deleteBtn:SetScript("OnClick", function(self)
-			SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_DELETE, MistyUI.postEntries[i].postIndex, "GUILD")
+		MistyUI.userPostEntries[i].deleteBtn = CreateFrame("Button", "MistyUI_Entry_EditBtn"..i, MistyUI.userPostList, "GameMenuButtonTemplate")
+		MistyUI.userPostEntries[i].deleteBtn:SetWidth(60)
+		MistyUI.userPostEntries[i].deleteBtn:SetHeight(30)
+		MistyUI.userPostEntries[i].deleteBtn:SetText('Delete')
+		MistyUI.userPostEntries[i].deleteBtn:SetPoint("TOPLEFT", MistyUI.userPostEntries[i].editBtn, "BOTTOMLEFT", 0, -10)
+		MistyUI.userPostEntries[i].deleteBtn:SetNormalFontObject("GameFontNormal")
+		MistyUI.userPostEntries[i].deleteBtn:SetHighlightFontObject("GameFontHighlight")
+		MistyUI.userPostEntries[i].deleteBtn:SetScript("OnClick", function(self)
+			SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_DELETE, MistyUI.userPostEntries[i].postIndex, "GUILD")
 		end)
-		MistyUI.postEntries[i].deleteBtn:Disable()
 	end
-	MistyTbl.list.UpdateEntries(MistyUI, 1)
+	MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, 1)
+	if Misty.options.collect then
+		--Misty.posts = {}
+		Misty.userPosts = {}
+		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_GATHER, MistyTbl.vars.playerName, "GUILD")
+	end
 end
 
 function MistyTbl.utils.postSubmitHandler(MistyUI, postText)
+	MistyUI.postBtn:Disable()
 	if postText ~= "" then
-		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_INITIAL, postText, "GUILD")
-		MistyTbl.vars.id = GetTime()
+		local id = time()
+		local message = postText..id
+		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_POST, message, "GUILD")
 	else
-		UIErrorsFrame:AddMessage('Warning. Empty message not sent.', 1.0, 1.0, 1.0, 5.0)
+		UIErrorsFrame:AddMessage('Notice.\n\nEmpty message not sent.', 1.0, 1.0, 1.0, 5.0)
 	end
 end
 
-function MistyTbl.list.addPost(MistyUI, character, sender, message, id)
-	local index = #Misty.posts + 1
-	Misty.posts[index] = {}
-	Misty.posts[index].postIndex = index
-	Misty.posts[index].character = character
-	Misty.posts[index].sender = sender
-	Misty.posts[index].message = message
-	Misty.posts[index].id = id
-	-- Check if the user is currently viewing the last page of the list
-	if (MistyTbl.vars.currPage * MistyTbl.constants.LIST_LIMIT) >= #Misty.posts then
-		-- If so, trigger the update of the next free button
-		MistyTbl.list.UpdateEntry(MistyUI, index, character, sender, message)
-	else
-		MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+function MistyTbl.list.addPost(MistyUI, sender, character, message, id)
+	local mainIndex = #Misty.posts + 1
+	local userIndex = #Misty.userPosts + 1
+	Misty.posts[mainIndex] = {}
+	Misty.posts[mainIndex].postIndex = mainIndex
+	Misty.posts[mainIndex].sender = sender
+	Misty.posts[mainIndex].character = character
+	Misty.posts[mainIndex].message = message
+	Misty.posts[mainIndex].id = id
+	if sender == MistyTbl.vars.playerFullName then
+		Misty.userPosts[userIndex] = {}
+		Misty.userPosts[userIndex].postIndex = userIndex
+		Misty.userPosts[userIndex].sender = sender
+		Misty.userPosts[userIndex].character = character
+		Misty.userPosts[userIndex].message = message
+		Misty.userPosts[userIndex].id = id
+	end
+	-- Check if the user is currently viewing the last page of the lists
+	if MistyUI.mainFrame:IsShown() then
+		if (MistyTbl.vars.mainCurrPage * MistyTbl.constants.LIST_LIMIT) >= #Misty.posts then
+			-- If so, trigger the update of the next free button
+			MistyTbl.list.updateEntry(MistyUI, MistyUI.postEntries, mainIndex, sender, character, message)
+		else
+			MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
+	elseif MistyUI.userFrame:IsShown() then
+		if (MistyTbl.vars.userCurrPage * MistyTbl.constants.LIST_LIMIT) >= #Misty.posts then
+			-- If so, trigger the update of the next free button
+			MistyTbl.list.updateEntry(MistyUI, MistyUI.userPostEntries, userIndex, sender, character, message)
+		else
+			MistyTbl.list.updateUserEntries(MistyUI, MistyUI.userPostEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
 	end
 end
 
-function MistyTbl.list.UpdateEntry(MistyUI, index, character, sender, message)
+function MistyTbl.list.updateEntry(MistyUI, postEntries, index, sender, character, message)
 	-- Determine the next free button by using the remainder (between 1 and the limit) as the index
 	local index = #Misty.posts % MistyTbl.constants.LIST_LIMIT
 	-- If the next free button is the last one, the remainder would be 0, so set the index to the last button
 	if index == 0 then
 		index = MistyTbl.constants.LIST_LIMIT
 	end
-	MistyUI.postEntries[index].postIndex = index
-	MistyUI.postEntries[index].character = character
-	MistyUI.postEntries[index].sender:SetText(sender)
-	MistyUI.postEntries[index].message:SetText(message)
-	if MistyUI.postEntries[index].character == MistyTbl.vars.playerFullName then
-		MistyUI.postEntries[index].editBtn:Enable()
-		MistyUI.postEntries[index].deleteBtn:Enable()
-	end
-	MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+	postEntries[index].postIndex = index
+	postEntries[index].sender = sender
+	postEntries[index].character:SetText(character)
+	postEntries[index].message:SetText(message)
+	MistyTbl.list.updateMainEntries(MistyUI, postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
 end
 
-function MistyTbl.list.UpdateEntries(MistyUI, postIndex)
+function MistyTbl.list.updateMainEntries(MistyUI, postEntries, postIndex)
 	for i = 1, MistyTbl.constants.LIST_LIMIT do
 		if Misty.posts[postIndex] then
-			MistyUI.postEntries[i].postIndex = postIndex
-			MistyUI.postEntries[i].character = Misty.posts[postIndex].character
-			MistyUI.postEntries[i].sender:SetText(Misty.posts[postIndex].sender)
-			MistyUI.postEntries[i].message:SetText(Misty.posts[postIndex].message)
-			MistyUI.postEntries[i].id = Misty.posts[postIndex].id
+			postEntries[i].postIndex = postIndex
+			postEntries[i].sender = Misty.posts[postIndex].sender
+			postEntries[i].character:SetText(Misty.posts[postIndex].character)
+			postEntries[i].message:SetText(Misty.posts[postIndex].message)
+			postEntries[i].id = Misty.posts[postIndex].id
 			postIndex = postIndex + 1
-			if MistyUI.postEntries[i].character == MistyTbl.vars.playerFullName then
-				MistyUI.postEntries[i].editBtn:Enable()
-				MistyUI.postEntries[i].deleteBtn:Enable()
-			end
 		else
-			MistyUI.postEntries[i].character = ''
-			MistyUI.postEntries[i].sender:SetText()
-			MistyUI.postEntries[i].message:SetText()
-			MistyUI.postEntries[i].id = ''
-			MistyUI.postEntries[i].editBtn:Disable()
-			MistyUI.postEntries[i].deleteBtn:Disable()
+			postEntries[i].sender = ''
+			postEntries[i].character:SetText()
+			postEntries[i].message:SetText()
+			postEntries[i].id = ''
 		end
 	end
-	if MistyTbl.vars.currPage == 1 then
-		MistyUI.prevBtn:Disable()
+	if MistyTbl.vars.mainCurrPage == 1 or postIndex == 1 then
+		MistyUI.mainPrevBtn:Disable()
 	else
-		MistyUI.prevBtn:Enable()
+		MistyUI.mainPrevBtn:Enable()
 	end
-	if #Misty.posts <= (MistyTbl.vars.currPage * MistyTbl.constants.LIST_LIMIT) then
-		MistyUI.nextBtn:Disable()
+	if #Misty.posts <= (MistyTbl.vars.mainCurrPage * MistyTbl.constants.LIST_LIMIT) or postIndex == 1 then
+		MistyUI.mainNextBtn:Disable()
 	else
-		MistyUI.nextBtn:Enable()
+		MistyUI.mainNextBtn:Enable()
 	end
-	MistyTbl.vars.totalPages = math.max(ceil(#Misty.posts / MistyTbl.constants.LIST_LIMIT), 1)
-	MistyUI.postListHeader:SetText(string.format("Page %s of %s", MistyTbl.vars.currPage, MistyTbl.vars.totalPages))
+	MistyTbl.vars.mainTotalPages = math.max(ceil(#Misty.posts / MistyTbl.constants.LIST_LIMIT), 1)
+	MistyUI.postListHeader:SetText(string.format("Page %s of %s", MistyTbl.vars.mainCurrPage, MistyTbl.vars.mainTotalPages))
+end
+
+function MistyTbl.list.updateUserEntries(MistyUI, postEntries, postIndex)
+	for i = 1, MistyTbl.constants.LIST_LIMIT do
+		if Misty.userPosts[postIndex] then
+			postEntries[i].postIndex = postIndex
+			postEntries[i].sender = Misty.userPosts[postIndex].sender
+			postEntries[i].character:SetText(Misty.userPosts[postIndex].character)
+			postEntries[i].message:SetText(Misty.userPosts[postIndex].message)
+			postEntries[i].id = Misty.userPosts[postIndex].id
+			MistyUI.userPostEntries[i].editBtn:Enable()
+			MistyUI.userPostEntries[i].deleteBtn:Enable()
+			postIndex = postIndex + 1
+		else
+			postEntries[i].sender = ''
+			postEntries[i].character:SetText()
+			postEntries[i].message:SetText()
+			postEntries[i].id = ''
+			MistyUI.userPostEntries[i].editBtn:Disable()
+			MistyUI.userPostEntries[i].deleteBtn:Disable()
+		end
+	end 
+	if MistyTbl.vars.userCurrPage == 1 or postIndex == 1 then
+		MistyUI.userPrevBtn:Disable()
+	else
+		MistyUI.userPrevBtn:Enable()
+	end
+	if #Misty.userPosts <= (MistyTbl.vars.userCurrPage * MistyTbl.constants.LIST_LIMIT) or postIndex == 1 then
+		MistyUI.userNextBtn:Disable()
+	else
+		MistyUI.userNextBtn:Enable()
+	end
+	MistyTbl.vars.userTotalPages = math.max(ceil(#Misty.userPosts / MistyTbl.constants.LIST_LIMIT), 1)
+	MistyUI.userPostListHeader:SetText(string.format("Page %s of %s", MistyTbl.vars.userCurrPage, MistyTbl.vars.userTotalPages))
 end
 
 function MistyTbl.list.resetList(MistyUI)
 	if Misty.posts[1] then
 		for i = 1, MistyTbl.constants.LIST_LIMIT do
-			MistyUI.postEntries[i].character = ''
-			MistyUI.postEntries[i].sender:SetText()
+			MistyUI.postEntries[i].sender = ''
+			MistyUI.postEntries[i].character:SetText()
 			MistyUI.postEntries[i].message:SetText()
-			MistyUI.postEntries[i].editBtn:Hide()
-			MistyUI.postEntries[i].deleteBtn:Hide()
 		end
 	end
 	Misty.posts = {}
+	Misty.userPosts = {}
 	MistyUI.posts = {}
-	MistyTbl.list.UpdateEntries(MistyUI, 1)
+	if MistyUI.mainFrame:IsShown() then
+		MistyTbl.vars.mainCurrPage = 1
+		MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, 1)
+	else
+		MistyTbl.vars.userCurrPage = 1
+		MistyTbl.list.updateUserEntries(MistyUI, MistyUI.postEntries, 1)
+	end
 	MistyTbl.utils.speak('The list has been reset.')
 end
 
 function MistyTbl.list.displayEdit(MistyUI, postEntry)
-	MistyTbl.vars.currEdit = postEntry
 	MistyUI.postEditFrame:Show()
 	MistyUI.postEditFrame.postEditTextBox:SetText(postEntry.message:GetText())
 end
 
-function MistyTbl.list.delete(MistyUI, postIndex)
+function MistyTbl.list.deleteEntry(MistyUI, postEntries, postIndex)
+	-- Remove the selected entry from the local list
 	table.remove(Misty.posts, postIndex)
-	if #Misty.posts == ((MistyTbl.vars.currPage - 1) * MistyTbl.constants.LIST_LIMIT) then
-		MistyTbl.vars.currPage = MistyTbl.vars.currPage - 1
+	-- Check if there are no more entries in the current page
+	if MistyUI.mainFrame:IsShown() then
+		if #Misty.posts == ((MistyTbl.vars.mainCurrPage - 1) * MistyTbl.constants.LIST_LIMIT) then
+			-- If so, then the UI must show the previous page or remain on the first
+			MistyTbl.vars.mainCurrPage = math.max((MistyTbl.vars.mainCurrPage - 1), 1)
+			-- Update the UI
+			MistyTbl.list.updateMainEntries(MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
+	else
+		if #Misty.posts == ((MistyTbl.vars.userCurrPage - 1) * MistyTbl.constants.LIST_LIMIT) then
+			-- If so, then the UI must show the previous page or remain on the first
+			MistyTbl.vars.userCurrPage = math.max((MistyTbl.vars.userCurrPage - 1), 1)
+			-- Update the UI
+			MistyTbl.list.updateUserEntries(MistyUI.userPostEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
 	end
-	MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+	
 end
 
-function MistyTbl.list.edit(MistyUI, postIndex, newMessage)
+function MistyTbl.list.edit(MistyUI, postEntries, postIndex, newMessage)
+	Misty.userPosts[postIndex].message = newMessage
 	Misty.posts[postIndex].message = newMessage
-	MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+	MistyTbl.list.updateUserEntries(MistyUI, postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
 	MistyUI.postEditFrame:Hide()
 	MistyUI.postEditFrame.postEditTextBox:SetText('')
 end
 
 function MistyTbl.list.previousPage(MistyUI)
-	if MistyTbl.vars.currPage > 1 then
-		MistyTbl.vars.currPage = MistyTbl.vars.currPage - 1
-		MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+	if MistyUI.mainFrame:IsShown() then
+		if MistyTbl.vars.mainCurrPage > 1 then
+			MistyTbl.vars.mainCurrPage = MistyTbl.vars.mainCurrPage - 1
+			MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
+	else
+		if MistyTbl.vars.userCurrPage > 1 then
+			MistyTbl.vars.userCurrPage = MistyTbl.vars.userCurrPage - 1
+			MistyTbl.list.updateUserEntries(MistyUI, MistyUI.userPostEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
 	end
 end
 
 function MistyTbl.list.nextPage(MistyUI)
-	if (#Misty.posts > (MistyTbl.vars.currPage * MistyTbl.constants.LIST_LIMIT)) then
-		MistyTbl.vars.currPage = MistyTbl.vars.currPage + 1
-		MistyTbl.list.UpdateEntries(MistyUI, MistyTbl.utils.newIndex())
+	if MistyUI.mainFrame:IsShown() then
+		if (#Misty.posts > (MistyTbl.vars.mainCurrPage * MistyTbl.constants.LIST_LIMIT)) then
+			MistyTbl.vars.mainCurrPage = MistyTbl.vars.mainCurrPage + 1
+			MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
+	else
+		if (#Misty.posts > (MistyTbl.vars.userCurrPage * MistyTbl.constants.LIST_LIMIT)) then
+			MistyTbl.vars.userCurrPage = MistyTbl.vars.userCurrPage + 1
+			MistyTbl.list.updateUserEntries(MistyUI, MistyUI.userPostEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		end
 	end
 end
 
-function MistyTbl.utils.newIndex()
-	return ((MistyTbl.vars.currPage * MistyTbl.constants.LIST_LIMIT) - (MistyTbl.constants.LIST_LIMIT - 1))
+function MistyTbl.utils.newIndex(mainListShown)
+	if mainListShown then
+		return ((MistyTbl.vars.mainCurrPage * MistyTbl.constants.LIST_LIMIT) - (MistyTbl.constants.LIST_LIMIT - 1))
+	else
+		return ((MistyTbl.vars.userCurrPage * MistyTbl.constants.LIST_LIMIT) - (MistyTbl.constants.LIST_LIMIT - 1))
+	end
 end
 
 function MistyTbl.utils.makeMovable(frame)
@@ -269,142 +397,279 @@ function MistyTbl.utils.classColour(unit)
 	return formattedClassText
 end
 
-function MistyTbl.utils.speak(text)
+function MistyTbl.utils.misty()
 	local colour = RAID_CLASS_COLORS["MONK"]
 	local formattedText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..'Misty|r'
-	print(formattedText..' says: '..text)
+	return formattedText
+end
+
+function MistyTbl.utils.speak(text)
+	print(MistyTbl.utils.misty()..' says: '..text)
 end
 
 function MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender)
-	if prefix == MistyTbl.constants.ADDON_PREFIX_INITIAL then
-		local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
+	if prefix == MistyTbl.constants.ADDON_PREFIX_POST then
+		-- Ensure Misty only accepts other user's posts
 		if sender == MistyTbl.vars.playerFullName then
-			MistyTbl.temp[1].sender = sender
-			MistyTbl.temp[1].message = message
-			SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_REQ_META, sender, "GUILD")
-			MistyUI.postBtn:Disable()
+			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
+			MistyTbl.list.addPost(MistyUI, sender, colouredByClass, strsub(message, 1, #message-10), strsub(message, #message-9))
+			MistyUI.toastFrame.toastMessage:SetText(colouredByClass..' posted a message!')
+			UIFrameFlash(MistyUI.toastFrame, 1, 1, 10, false, 3, 0)
 		end
-	elseif prefix == MistyTbl.constants.ADDON_PREFIX_REQ_META then
-		-- Respond to a request for metadata if the sender of the original message is the player
-		if message == MistyTbl.vars.playerFullName then
-			SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_SEND_META, MistyTbl.vars.id, "GUILD")
-			MistyTbl.vars.request = true
-		end
-	elseif prefix == MistyTbl.constants.ADDON_PREFIX_SEND_META then
-		if MistyTbl.vars.request == true then
-			MistyTbl.temp[1].id = message
-			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(MistyTbl.temp[1].sender, "none"))
-			MistyTbl.list.addPost(MistyUI, MistyTbl.temp[1].sender, colouredByClass, MistyTbl.temp[1].message, MistyTbl.temp[1].id)
-			MistyTbl.temp[1] = {}
-			MistyTbl.vars.request = false
+		if sender == MistyTbl.vars.playerFullName then
 			MistyUI.postBtn:Enable()
 		end
 	elseif prefix == MistyTbl.constants.ADDON_PREFIX_DELETE then
-		MistyTbl.list.delete(MistyUI, tonumber(message))
+		MistyTbl.list.deleteEntry(MistyUI, tonumber(message))
 	elseif prefix == MistyTbl.constants.ADDON_PREFIX_EDIT then
 		local postIndex, newMessage = strsplit("|", message, 2)
-		MistyTbl.list.edit(MistyUI, tonumber(postIndex), newMessage)
+		MistyTbl.list.edit(MistyUI, MistyUI.userPostEntries, tonumber(postIndex), newMessage)
+	elseif prefix == MistyTbl.constants.ADDON_PREFIX_GATHER then
+		if #Misty.posts > 0 then
+			local list = {}
+			local j = 1
+			for i = 1, #Misty.posts do
+				if Misty.posts[i].sender == sender then
+					list[j] = i
+					j = j + 1
+				end
+			end
+			for i = 1, #list do
+				table.remove(Misty.posts, list[i])
+			end
+			-- Ensure Misty only accepts other user's posts
+			if sender == MistyTbl.vars.playerFullName then
+				for i = 1, #Misty.posts do
+					local message = Misty.posts[i].message..Misty.posts[i].id
+					SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_COLLECT, message, "GUILD")
+				end
+				SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_COLLECT, "end", "GUILD")
+			end
+		end
+	elseif prefix == MistyTbl.constants.ADDON_PREFIX_COLLECT then
+		if not MistyTbl.vars.collecting then
+			MistyTbl.vars.collecting = true
+			MistyTbl.vars.collectingFrom = sender
+		end
+		MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+		-- Ensure Misty only accepts other user's posts
+		if (sender == MistyTbl.vars.playerFullName) and (sender == MistyTbl.vars.collectingFrom) and (message ~= "end") then
+			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
+			MistyTbl.list.addPost(MistyUI, sender, colouredByClass, strsub(message, 1, #message-10), strsub(message, #message-9))
+		end
 	end
 end
 
--- Define the frame table which will be used to store everything to be used in it
+-- Define the frame table which will be used to store everything in Misty's UI
 
 local MistyUI = CreateFrame("Frame", "Misty_UI_Frame", UIParent, "BasicFrameTemplateWithInset")
 MistyUI:SetSize(440, 680)
 MistyUI:SetPoint("TOP", UIParent, "TOP", 0, -200)
 MistyUI.title = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 MistyUI.title:SetPoint("CENTER", MistyUI.TitleBg, "CENTER", 5, 0)
-MistyUI.title:SetText(MistyTbl.constants.UI_TITLE)
+MistyUI.title:SetText(MistyTbl.utils.misty()..MistyTbl.constants.UI_TITLE)
 MistyUI:RegisterEvent("ADDON_LOADED")
 MistyUI:RegisterEvent("CHAT_MSG_ADDON")
+MistyUI:RegisterEvent("PLAYER_LOGOUT")
 MistyTbl.utils.makeMovable(MistyUI)
 --MistyUI:SetUserPlaced(enable)
 MistyUI.posts = {}
 
-MistyUI.postTextBoxLabel = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-MistyUI.postTextBoxLabel:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT", 10, -10)
+MistyUI.mainFrame = CreateFrame("Frame", "Misty_Main_Frame", MistyUI)
+MistyUI.mainFrame:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT")
+MistyUI.mainFrame:SetPoint("TOPRIGHT", MistyUI.TitleBg, "BOTTOMRIGHT")
+MistyUI.mainFrame:SetPoint("BOTTOMLEFT", MistyUI, "BOTTOMLEFT")
+MistyUI.mainFrame:SetPoint("BOTTOMRIGHT", MistyUI, "BOTTOMRIGHT")
+
+MistyUI.postTextBoxLabel = MistyUI.mainFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.postTextBoxLabel:SetPoint("TOPLEFT", MistyUI.mainFrame, "TOPLEFT", 12, -10)
 MistyUI.postTextBoxLabel:SetSize(100, 40)
 MistyUI.postTextBoxLabel:SetText("Enter Message:")
 
-MistyUI.postTextBox = CreateFrame("EditBox", nil, MistyUI)
+MistyUI.postTextBox = CreateFrame("EditBox", nil, MistyUI.mainFrame, "InputBoxTemplate")
 MistyUI.postTextBox:SetPoint("TOP", MistyUI.TitleBg, "BOTTOM", 0, -20)
-MistyUI.postTextBox:SetPoint("BOTTOM", MistyUI.TitleBg, "TOP", 0, -103)
 MistyUI.postTextBox:SetPoint("LEFT", MistyUI.postTextBoxLabel, "RIGHT", 10, 0)
-MistyUI.postTextBox:SetPoint("RIGHT", MistyUI, "RIGHT", -20, 0)
 MistyUI.postTextBox:SetAutoFocus(false)
 MistyUI.postTextBox:SetMaxLetters(MistyTbl.constants.MAX_LETTERS)
-MistyUI.postTextBox:SetMultiLine(true)
-MistyUI.postTextBox:SetJustifyH("LEFT")
-MistyUI.postTextBox:SetJustifyV("CENTER")
-MistyUI.postTextBox:SetFont("Fonts\\FRIZQT__.TTF", 10)
-MistyUI.postTextBox:SetBackdropBorderColor(0.3, 0.3, 0.3)
--- Left, Right, Top, Bottom
-MistyUI.postTextBox:SetTextInsets(10, 10, 5, 0)
-MistyUI.postTextBox:SetBackdrop({
-	bgFile = "Interface/Buttons/UI-SliderBar-Background",
-	edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-	edgeSize = 15,
-	insets = {left = 2, right = 1, top = 1, bottom = 1},
-})
+MistyUI.postTextBox:SetSize(300, 20)
 
-MistyUI.postBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
-MistyUI.postBtn:SetPoint("TOPLEFT", MistyUI.postTextBox, "BOTTOMLEFT", 0, -10)
-MistyUI.postBtn:SetSize(80, 25)
+MistyUI.postBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.postBtn:SetPoint("TOPRIGHT", MistyUI.postTextBox, "BOTTOMRIGHT", 0, -10)
+MistyUI.postBtn:SetSize(MistyTbl.constants.SMALL_BUTTON_WIDTH, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
 MistyUI.postBtn:SetText("Submit")
 MistyUI.postBtn:SetNormalFontObject("GameFontNormal")
 MistyUI.postBtn:SetHighlightFontObject("GameFontHighlight")
 MistyUI.postBtn:SetScript("OnClick", function(self)
-	MistyTbl.utils.postSubmitHandler(self:GetParent(), MistyUI.postTextBox:GetText())
+	MistyTbl.utils.postSubmitHandler(MistyUI, MistyUI.postTextBox:GetText())
 end)
 
-MistyUI.resetBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
-MistyUI.resetBtn:SetPoint("LEFT", MistyUI.postBtn, "RIGHT", 20, 0)
-MistyUI.resetBtn:SetSize(80, 25)
-MistyUI.resetBtn:SetText("Reset")
-MistyUI.resetBtn:SetNormalFontObject("GameFontNormal")
-MistyUI.resetBtn:SetHighlightFontObject("GameFontHighlight")
-MistyUI.resetBtn:SetScript("OnClick", function(self)
-	MistyTbl.list.resetList(MistyUI)
-end)
-
-MistyUI.postList = CreateFrame("Frame", "Post_List_Frame", MistyUI)
+MistyUI.postList = CreateFrame("Frame", "Post_List_Frame", MistyUI.mainFrame)
 MistyUI.postList:SetWidth(350)
 MistyUI.postList:SetHeight(455)
-MistyUI.postList:SetPoint("TOPLEFT", MistyUI.postTextBoxLabel, "BOTTOMLEFT", 5, -95)
+MistyUI.postList:SetPoint("TOP", MistyUI, "TOP", 0, -170)
 MistyUI.postList:SetBackdrop({ 
   bgFile = "Interface/ACHIEVEMENTFRAME/UI-Achievement-Parchment-Horizontal", 
   edgeFile = "Interface/Tooltips/UI-Tooltip-Border", tile = false, tileSize = 16, edgeSize = 16, 
   insets = { left = 4, right = 4, top = 4, bottom = 4 }
 })
 
-MistyUI.postListHeader = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.postListHeader = MistyUI.mainFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 MistyUI.postListHeader:SetPoint("BOTTOM", MistyUI.postList, "TOP", 0, 0)
 MistyUI.postListHeader:SetSize(200, 20)
 
-MistyUI.postListOptionsHeader = MistyUI:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-MistyUI.postListOptionsHeader:SetPoint("BOTTOMLEFT", MistyUI.postList, "TOPRIGHT")
-MistyUI.postListOptionsHeader:SetSize(60, 20)
-MistyUI.postListOptionsHeader:SetText('Options')
+MistyUI.userPostsBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.userPostsBtn:SetPoint("BOTTOMLEFT", MistyUI.postList, "TOPLEFT", 27, 30)
+MistyUI.userPostsBtn:SetSize(MistyTbl.constants.SMALL_BUTTON_WIDTH + 10, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
+MistyUI.userPostsBtn:SetText("Your Posts")
+MistyUI.userPostsBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.userPostsBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.userPostsBtn:SetScript("OnClick", function(self)
+	MistyUI.mainFrame:Hide()
+	MistyUI.userFrame:Show()
+	MistyTbl.list.updateUserEntries(MistyUI, MistyUI.userPostEntries, 1)
+end)
 
-MistyUI.prevBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
-MistyUI.prevBtn:SetPoint("TOPLEFT", MistyUI.postList , "BOTTOMLEFT", 0, -10)
-MistyUI.prevBtn:SetSize(140, 30)
-MistyUI.prevBtn:SetText("Previous")
-MistyUI.prevBtn:SetNormalFontObject("GameFontNormal")
-MistyUI.prevBtn:SetHighlightFontObject("GameFontHighlight")
-MistyUI.prevBtn:SetScript("OnClick", function(self)
+MistyUI.optionsBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.optionsBtn:SetPoint("TOPLEFT", MistyUI.userPostsBtn , "TOPRIGHT", 10, 0)
+MistyUI.optionsBtn:SetSize(MistyTbl.constants.SMALL_BUTTON_WIDTH + 10, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
+MistyUI.optionsBtn:SetText("Options")
+MistyUI.optionsBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.optionsBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.optionsBtn:SetScript("OnClick", function(self)
+	MistyUI.mainFrame:Hide()
+	MistyUI.optionsFrame:Show()
+end)
+
+MistyUI.resetBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.resetBtn:SetPoint("TOPLEFT", MistyUI.optionsBtn, "TOPRIGHT", 10, 0)
+MistyUI.resetBtn:SetSize(MistyTbl.constants.SMALL_BUTTON_WIDTH + 10, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
+MistyUI.resetBtn:SetText("Reset List")
+MistyUI.resetBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.resetBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.resetBtn:SetScript("OnClick", function(self)
+	MistyTbl.list.resetList(MistyUI)
+end)
+
+MistyUI.mainPrevBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.mainPrevBtn:SetPoint("TOPLEFT", MistyUI.postList , "BOTTOMLEFT", 25, -10)
+MistyUI.mainPrevBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.LARGE_BUTTON_HEIGHT)
+MistyUI.mainPrevBtn:SetText("Previous")
+MistyUI.mainPrevBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.mainPrevBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.mainPrevBtn:SetScript("OnClick", function(self)
 	MistyTbl.list.previousPage(MistyUI)
 end)
 
-MistyUI.nextBtn = CreateFrame("Button", nil, MistyUI, "GameMenuButtonTemplate")
-MistyUI.nextBtn:SetPoint("LEFT", MistyUI.prevBtn, "RIGHT", 20, 0)
-MistyUI.nextBtn:SetSize(140, 30)
-MistyUI.nextBtn:SetText("Next")
-MistyUI.nextBtn:SetNormalFontObject("GameFontNormal")
-MistyUI.nextBtn:SetHighlightFontObject("GameFontHighlight")
-MistyUI.nextBtn:SetScript("OnClick", function(self)
+MistyUI.mainNextBtn = CreateFrame("Button", nil, MistyUI.mainFrame, "GameMenuButtonTemplate")
+MistyUI.mainNextBtn:SetPoint("LEFT", MistyUI.mainPrevBtn, "RIGHT", 20, 0)
+MistyUI.mainNextBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.LARGE_BUTTON_HEIGHT)
+MistyUI.mainNextBtn:SetText("Next")
+MistyUI.mainNextBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.mainNextBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.mainNextBtn:SetScript("OnClick", function(self)
 	MistyTbl.list.nextPage(MistyUI)
 end)
+
+
+-- The User's Posts Section
+
+MistyUI.userFrame = CreateFrame("Frame", "Misty_Main_Frame", MistyUI)
+MistyUI.userFrame:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT")
+MistyUI.userFrame:SetPoint("TOPRIGHT", MistyUI.TitleBg, "BOTTOMRIGHT")
+MistyUI.userFrame:SetPoint("BOTTOMLEFT", MistyUI, "BOTTOMLEFT")
+MistyUI.userFrame:SetPoint("BOTTOMRIGHT", MistyUI, "BOTTOMRIGHT")
+MistyUI.userFrame:Hide()
+
+MistyUI.userPostHeader = MistyUI.userFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.userPostHeader:SetPoint("TOP", MistyUI.userFrame, "TOP", 0, -20)
+MistyUI.userPostHeader:SetSize(200, 20)
+MistyUI.userPostHeader:SetText("User Posts")
+
+MistyUI.userShowMainBtn = CreateFrame("Button", nil, MistyUI.userFrame, "GameMenuButtonTemplate")
+MistyUI.userShowMainBtn:SetPoint("TOP", MistyUI.userPostHeader , "BOTTOM", 0, -20)
+MistyUI.userShowMainBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
+MistyUI.userShowMainBtn:SetText("Main Window")
+MistyUI.userShowMainBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.userShowMainBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.userShowMainBtn:SetScript("OnClick", function(self)
+	MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+	MistyUI.userFrame:Hide()
+	MistyUI.mainFrame:Show()
+end)
+
+MistyUI.userPostList = CreateFrame("Frame", "User_Post_List_Frame", MistyUI.userFrame)
+MistyUI.userPostList:SetWidth(350)
+MistyUI.userPostList:SetHeight(455)
+MistyUI.userPostList:SetPoint("TOP", MistyUI.userShowMainBtn, "BOTTOM", -20, -30)
+MistyUI.userPostList:SetBackdrop({ 
+  bgFile = "Interface/ACHIEVEMENTFRAME/UI-Achievement-Parchment-Horizontal", 
+  edgeFile = "Interface/Tooltips/UI-Tooltip-Border", tile = false, tileSize = 16, edgeSize = 16, 
+  insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+
+MistyUI.userPostListHeader = MistyUI.userFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.userPostListHeader:SetPoint("BOTTOM", MistyUI.userPostList, "TOP", 0, 0)
+MistyUI.userPostListHeader:SetSize(200, 20)
+
+MistyUI.userPrevBtn = CreateFrame("Button", nil, MistyUI.userFrame, "GameMenuButtonTemplate")
+MistyUI.userPrevBtn:SetPoint("TOPLEFT", MistyUI.userPostList , "BOTTOMLEFT", 25, -10)
+MistyUI.userPrevBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.LARGE_BUTTON_HEIGHT)
+MistyUI.userPrevBtn:SetText("Previous")
+MistyUI.userPrevBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.userPrevBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.userPrevBtn:SetScript("OnClick", function(self)
+	MistyTbl.list.previousPage(MistyUI)
+end)
+
+MistyUI.userNextBtn = CreateFrame("Button", nil, MistyUI.userFrame, "GameMenuButtonTemplate")
+MistyUI.userNextBtn:SetPoint("LEFT", MistyUI.userPrevBtn, "RIGHT", 20, 0)
+MistyUI.userNextBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.LARGE_BUTTON_HEIGHT)
+MistyUI.userNextBtn:SetText("Next")
+MistyUI.userNextBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.userNextBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.userNextBtn:SetScript("OnClick", function(self)
+	MistyTbl.list.nextPage(MistyUI)
+end)
+
+
+-- The Options Section
+
+MistyUI.optionsFrame = CreateFrame("Frame", "Misty_Options_Frame", MistyUI)
+MistyUI.optionsFrame:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT")
+MistyUI.optionsFrame:SetPoint("TOPRIGHT", MistyUI.TitleBg, "BOTTOMRIGHT")
+MistyUI.optionsFrame:SetPoint("BOTTOMLEFT", MistyUI, "BOTTOMLEFT")
+MistyUI.optionsFrame:SetPoint("BOTTOMRIGHT", MistyUI, "BOTTOMRIGHT")
+MistyUI.optionsFrame:Hide()
+
+MistyUI.optionsHeader = MistyUI.optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.optionsHeader:SetPoint("TOP", MistyUI.optionsFrame, "TOP", 0, -20)
+MistyUI.optionsHeader:SetSize(200, 20)
+MistyUI.optionsHeader:SetText("Options")
+
+MistyUI.optionsShowMainBtn = CreateFrame("Button", nil, MistyUI.optionsFrame, "GameMenuButtonTemplate")
+MistyUI.optionsShowMainBtn:SetPoint("TOP", MistyUI.optionsHeader , "BOTTOM", 0, -20)
+MistyUI.optionsShowMainBtn:SetSize(MistyTbl.constants.LARGE_BUTTON_WIDTH, MistyTbl.constants.SMALL_BUTTON_HEIGHT)
+MistyUI.optionsShowMainBtn:SetText("Main Window")
+MistyUI.optionsShowMainBtn:SetNormalFontObject("GameFontNormal")
+MistyUI.optionsShowMainBtn:SetHighlightFontObject("GameFontHighlight")
+MistyUI.optionsShowMainBtn:SetScript("OnClick", function(self)
+	MistyUI.optionsFrame:Hide()
+	MistyUI.mainFrame:Show()
+end)
+
+MistyUI.gatherCheckBtn = CreateFrame("CheckButton", nil, MistyUI.optionsFrame, "UICheckButtonTemplate")
+MistyUI.gatherCheckBtn:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT", 10, -100)
+MistyUI.gatherCheckBtn.text:SetText("Set Misty to gather data from other players upon login.")
+MistyUI.gatherCheckBtn:SetScript("OnClick", function(self)
+	if MistyUI.gatherCheckBtn:GetChecked() then
+		Misty.options.collect = true
+	else
+		Misty.options.collect = false
+	end
+end)
+
+
+-- The Edit Post Section
 
 MistyUI.postEditFrame = CreateFrame("Frame", "Misty_UI_Edit_Frame", UIParent, "BasicFrameTemplateWithInset")
 MistyUI.postEditFrame:SetWidth(440)
@@ -420,7 +685,7 @@ MistyTbl.utils.makeMovable(MistyUI.postEditFrame)
 MistyUI.postEditFrame.postEditTextBox = CreateFrame("EditBox", nil, MistyUI.postEditFrame, "InputBoxTemplate")
 MistyUI.postEditFrame.postEditTextBox:SetPoint("TOPLEFT", MistyUI.postEditFrame, "TOPLEFT", 20, -40)
 MistyUI.postEditFrame.postEditTextBox:SetSize(270, 20)
-MistyUI.postEditFrame.postEditTextBox:SetAutoFocus(false)
+MistyUI.postEditFrame.postEditTextBox:SetFocus()
 MistyUI.postEditFrame.postEditTextBox:SetFrameLevel(255)
 MistyUI.postEditFrame.postEditTextBox:SetMaxLetters(MistyTbl.constants.MAX_LETTERS)
 
@@ -446,18 +711,43 @@ MistyUI.postEditFrame.cancelBtn:SetScript("OnClick", function(self)
 	MistyUI.postEditFrame.postEditTextBox:SetText('')
 end)
 
--- Addon Event Handler
+
+-- The Toast Section
+
+MistyUI.toastFrame = CreateFrame("Frame", nil, UIParent)
+MistyUI.toastFrame:SetSize(150, 60)
+MistyUI.toastFrame:SetPoint("RIGHT", UIParent, "RIGHT", -50, 0)
+MistyUI.toastFrame:SetBackdrop({
+	bgFile = "Interface/Buttons/UI-SliderBar-Background",
+	insets = {left = -5, right = -5, top = 0, bottom = 0},
+})
+MistyUI.toastFrame:Hide()
+
+MistyUI.toastFrame.toastHeader = MistyUI.toastFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.toastFrame.toastHeader:SetPoint("TOP", MistyUI.toastFrame, "TOP", 0, -5)
+MistyUI.toastFrame.toastHeader:SetWidth(148)
+MistyUI.toastFrame.toastHeader:SetText(MistyTbl.utils.misty())
+
+MistyUI.toastFrame.toastMessage = MistyUI.toastFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+MistyUI.toastFrame.toastMessage:SetPoint("TOP", MistyUI.toastFrame.toastHeader, "BOTTOM", 0, -10)
+MistyUI.toastFrame.toastMessage:SetWidth(148)
+MistyUI.toastFrame.toastMessage:SetJustifyH("left")
+
+
+-- The Event Handler
+
 function Misty_Event_Handler(self, event, ...)
 	if event == "ADDON_LOADED" and ... == "!Misty" then
 		MistyTbl.list.init(MistyUI)
 		MistyUI:UnregisterEvent("ADDON_LOADED")
-	end
-	if event == "CHAT_MSG_ADDON" then
-		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_INITIAL)
-		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_REQ_META)
-		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_SEND_META)
+	elseif event == "CHAT_MSG_ADDON" then
+		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_POST)
+		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_GATHER)
+		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_COLLECT)
 		local prefix, message, channel, sender = ...
 		MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender)
+	elseif event == "PLAYER_LOGOUT" then
+		--
 	end
 end
 
