@@ -1,5 +1,5 @@
 -- Misty by Counsel
--- Version 0.1.0.0 - Build 1-4
+-- Version 0.1.0.0 - Build 1-5
 
 -- Short reload slash command
 SLASH_RELOADUI1 = "/rl"
@@ -35,8 +35,8 @@ MistyTbl.constants.ADDON_PREFIX_DELETE = "Misty_d"
 MistyTbl.constants.ADDON_PREFIX_EDIT = "Misty_e"
 MistyTbl.constants.ADDON_PREFIX_GATHER = "Misty_g"
 MistyTbl.constants.ADDON_PREFIX_COLLECT = "Misty_c"
--- Set the maximum length of a post to the maximum length of a character name and the length of the post IDs being generated subtracted from the maximum length of a message: 255 - 12 - 10
-MistyTbl.constants.MAX_LETTERS = 233
+MistyTbl.constants.ADDON_PREFIX_LOGOUT = "Misty_l"
+MistyTbl.constants.MAX_LETTERS = 222
 MistyTbl.constants.LIST_LIMIT = 4
 -- Dimension Constants
 MistyTbl.constants.SMALL_BUTTON_WIDTH = 80
@@ -70,13 +70,24 @@ function MistyTbl.list.init(MistyUI)
 	if not Misty or not Misty.options then
 		Misty = {}
 		Misty.options = {}
+		Misty.options.silent = true
 		Misty.options.collect = false
 		Misty.posts = {}
 		Misty.userPosts = {}
-	end	
+	end
+	if Misty.options.collect == nil then
+		Misty.options.collect = false
+	end
+	if Misty.options.silent == nil then
+		Misty.options.silent = false
+	end
 	
 	if Misty.options.collect then
 		MistyUI.gatherCheckBtn:SetChecked(true)
+	end
+	
+	if Misty.options.silent then
+		MistyUI.silentCheckBtn:SetChecked(true)
 	end
 	
 	MistyTbl.vars.playerName, MistyTbl.vars.playerRealm = UnitFullName("player")
@@ -169,31 +180,29 @@ end
 function MistyTbl.utils.postSubmitHandler(MistyUI, postText)
 	MistyUI.postBtn:Disable()
 	if postText ~= "" then
-		local id = time()
-		local message = postText..id
-		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_POST, message, "GUILD")
+		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_POST, MistyTbl.utils.addUserClass(postText), "GUILD")
 	else
 		UIErrorsFrame:AddMessage('Notice.\n\nEmpty message not sent.', 1.0, 1.0, 1.0, 5.0)
 	end
 end
 
+function MistyTbl.utils.addUserClass(originalMessage)
+	local id = time()
+	local class, classFileName = UnitClass("player")
+	local classText = "-"..classFileName
+	local text = originalMessage..id
+	local message = text..classText
+	return message
+end
+
 function MistyTbl.list.addPost(MistyUI, sender, character, message, id)
 	local mainIndex = #Misty.posts + 1
-	local userIndex = #Misty.userPosts + 1
 	Misty.posts[mainIndex] = {}
 	Misty.posts[mainIndex].postIndex = mainIndex
 	Misty.posts[mainIndex].sender = sender
 	Misty.posts[mainIndex].character = character
 	Misty.posts[mainIndex].message = message
 	Misty.posts[mainIndex].id = id
-	if sender == MistyTbl.vars.playerFullName then
-		Misty.userPosts[userIndex] = {}
-		Misty.userPosts[userIndex].postIndex = userIndex
-		Misty.userPosts[userIndex].sender = sender
-		Misty.userPosts[userIndex].character = character
-		Misty.userPosts[userIndex].message = message
-		Misty.userPosts[userIndex].id = id
-	end
 	-- Check if the user is currently viewing the last page of the lists
 	if MistyUI.mainFrame:IsShown() then
 		if (MistyTbl.vars.mainCurrPage * MistyTbl.constants.LIST_LIMIT) >= #Misty.posts then
@@ -256,19 +265,18 @@ function MistyTbl.list.updateMainEntries(MistyUI, postEntries, postIndex)
 	MistyUI.postListHeader:SetText(string.format("Page %s of %s", MistyTbl.vars.mainCurrPage, MistyTbl.vars.mainTotalPages))
 end
 
-function MistyTbl.list.updateUserEntries(MistyUI, postEntries, postIndex)
+function MistyTbl.list.updateUserEntries(MistyUI, postEntries)
+	local postIndex = MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown())
 	for i = 1, MistyTbl.constants.LIST_LIMIT do
 		if Misty.userPosts[postIndex] then
 			postEntries[i].postIndex = postIndex
-			postEntries[i].sender = Misty.userPosts[postIndex].sender
-			postEntries[i].character:SetText(Misty.userPosts[postIndex].character)
+			postEntries[i].character:SetText("You posted: ")
 			postEntries[i].message:SetText(Misty.userPosts[postIndex].message)
 			postEntries[i].id = Misty.userPosts[postIndex].id
 			MistyUI.userPostEntries[i].editBtn:Enable()
 			MistyUI.userPostEntries[i].deleteBtn:Enable()
 			postIndex = postIndex + 1
 		else
-			postEntries[i].sender = ''
 			postEntries[i].character:SetText()
 			postEntries[i].message:SetText()
 			postEntries[i].id = ''
@@ -308,7 +316,9 @@ function MistyTbl.list.resetList(MistyUI)
 		MistyTbl.vars.userCurrPage = 1
 		MistyTbl.list.updateUserEntries(MistyUI, MistyUI.postEntries, 1)
 	end
-	MistyTbl.utils.speak('The list has been reset.')
+	if not Misty.options.silent then
+		MistyTbl.utils.speak('The list has been reset.')
+	end
 end
 
 function MistyTbl.list.displayEdit(MistyUI, postEntry)
@@ -316,34 +326,26 @@ function MistyTbl.list.displayEdit(MistyUI, postEntry)
 	MistyUI.postEditFrame.postEditTextBox:SetText(postEntry.message:GetText())
 end
 
-function MistyTbl.list.deleteEntry(MistyUI, postEntries, postIndex)
-	-- Remove the selected entry from the local list
-	table.remove(Misty.posts, postIndex)
+function MistyTbl.list.deleteEntry(MistyUI, postIndex)
 	-- Check if there are no more entries in the current page
-	if MistyUI.mainFrame:IsShown() then
-		if #Misty.posts == ((MistyTbl.vars.mainCurrPage - 1) * MistyTbl.constants.LIST_LIMIT) then
-			-- If so, then the UI must show the previous page or remain on the first
-			MistyTbl.vars.mainCurrPage = math.max((MistyTbl.vars.mainCurrPage - 1), 1)
-			-- Update the UI
-			MistyTbl.list.updateMainEntries(MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
-		end
-	else
-		if #Misty.posts == ((MistyTbl.vars.userCurrPage - 1) * MistyTbl.constants.LIST_LIMIT) then
-			-- If so, then the UI must show the previous page or remain on the first
-			MistyTbl.vars.userCurrPage = math.max((MistyTbl.vars.userCurrPage - 1), 1)
-			-- Update the UI
-			MistyTbl.list.updateUserEntries(MistyUI.userPostEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
-		end
+	-- Remove the selected entry from the local list
+	table.remove(Misty.userPosts, postIndex)
+	if #Misty.posts == ((MistyTbl.vars.userCurrPage - 1) * MistyTbl.constants.LIST_LIMIT) then
+		-- If so, then the UI must show the previous page or remain on the first
+		MistyTbl.vars.userCurrPage = math.max((MistyTbl.vars.userCurrPage - 1), 1)
+		-- Update the UI
 	end
-	
+	MistyTbl.list.updateUserEntries(MistyUI, MistyUI.userPostEntries)
 end
 
 function MistyTbl.list.edit(MistyUI, postEntries, postIndex, newMessage)
 	Misty.userPosts[postIndex].message = newMessage
-	Misty.posts[postIndex].message = newMessage
 	MistyTbl.list.updateUserEntries(MistyUI, postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
+	if not Misty.options.silent then
+		MistyTbl.utils.speak('Your post was successfully modified.')
+	end
 	MistyUI.postEditFrame:Hide()
-	MistyUI.postEditFrame.postEditTextBox:SetText('')
+	MistyUI.postEditFrame.postEditTextBox:SetText("")
 end
 
 function MistyTbl.list.previousPage(MistyUI)
@@ -391,7 +393,7 @@ function MistyTbl.utils.makeMovable(frame)
 end
 
 function MistyTbl.utils.classColour(unit)
-	local class, classFileName = UnitClass(Ambiguate(unit, "none"))
+	local class, classFileName = UnitClass(unit)
 	local colour = RAID_CLASS_COLORS[classFileName]
 	local formattedClassText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..unit..'|r'
 	return formattedClassText
@@ -409,14 +411,27 @@ end
 
 function MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender)
 	if prefix == MistyTbl.constants.ADDON_PREFIX_POST then
+		local extractedMessage, class = strsplit("-", message, 2)
 		-- Ensure Misty only accepts other user's posts
-		if sender == MistyTbl.vars.playerFullName then
-			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
-			MistyTbl.list.addPost(MistyUI, sender, colouredByClass, strsub(message, 1, #message-10), strsub(message, #message-9))
-			MistyUI.toastFrame.toastMessage:SetText(colouredByClass..' posted a message!')
+		if sender ~= MistyTbl.vars.playerFullName then	
+			local colour = RAID_CLASS_COLORS[class]
+			local formattedClassText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..Ambiguate(sender, "none")..'|r'
+			MistyTbl.list.addPost(MistyUI, sender, formattedClassText, strsub(extractedMessage, 1, #extractedMessage-10), strsub(extractedMessage, #extractedMessage-9))
+			MistyUI.toastFrame.toastMessage:SetText(formattedClassText..' posted a message!')
 			UIFrameFlash(MistyUI.toastFrame, 1, 1, 10, false, 3, 0)
 		end
 		if sender == MistyTbl.vars.playerFullName then
+			if not Misty.options.silent then
+				print(MistyTbl.utils.speak("Your message was successfully sent."))
+			end
+			local userIndex = #Misty.userPosts + 1
+			Misty.userPosts[userIndex] = {}
+			Misty.userPosts[userIndex].postIndex = userIndex
+			Misty.userPosts[userIndex].sender = sender
+			Misty.userPosts[userIndex].character = character
+			Misty.userPosts[userIndex].message = strsub(extractedMessage, 1, #extractedMessage-10)
+			Misty.userPosts[userIndex].id = strsub(extractedMessage, #extractedMessage-9)
+			MistyUI.postTextBox:SetText("")
 			MistyUI.postBtn:Enable()
 		end
 	elseif prefix == MistyTbl.constants.ADDON_PREFIX_DELETE then
@@ -438,10 +453,10 @@ function MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender
 				table.remove(Misty.posts, list[i])
 			end
 			-- Ensure Misty only accepts other user's posts
-			if sender == MistyTbl.vars.playerFullName then
+			if sender ~= MistyTbl.vars.playerFullName then
 				for i = 1, #Misty.posts do
 					local message = Misty.posts[i].message..Misty.posts[i].id
-					SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_COLLECT, message, "GUILD")
+					SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_COLLECT, MistyTbl.utils.addUserClass(message), "GUILD")
 				end
 				SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_COLLECT, "end", "GUILD")
 			end
@@ -453,12 +468,17 @@ function MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender
 		end
 		MistyTbl.list.updateMainEntries(MistyUI, MistyUI.postEntries, MistyTbl.utils.newIndex(MistyUI.mainFrame:IsShown()))
 		-- Ensure Misty only accepts other user's posts
-		if (sender == MistyTbl.vars.playerFullName) and (sender == MistyTbl.vars.collectingFrom) and (message ~= "end") then
-			local colouredByClass = MistyTbl.utils.classColour(Ambiguate(sender, "none"))
-			MistyTbl.list.addPost(MistyUI, sender, colouredByClass, strsub(message, 1, #message-10), strsub(message, #message-9))
+		if (sender ~= MistyTbl.vars.playerFullName) and (sender == MistyTbl.vars.collectingFrom) and (message ~= "end") then
+			local extractedMessage, class = strsplit("-", message, 2)
+			local colour = RAID_CLASS_COLORS[class]
+			local formattedClassText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..Ambiguate(sender, "none")..'|r'
+			MistyTbl.list.addPost(MistyUI, sender, formattedClassText, strsub(extractedMessage, 1, #extractedMessage-10), strsub(extractedMessage, #extractedMessage-9))
 		end
+	elseif prefix == MistyTbl.constants.ADDON_PREFIX_LOGOUT then
+		--print(MistyTbl.utils.speak("The status of "..message.." has changed."))
 	end
 end
+
 
 -- Define the frame table which will be used to store everything in Misty's UI
 
@@ -657,8 +677,19 @@ MistyUI.optionsShowMainBtn:SetScript("OnClick", function(self)
 	MistyUI.mainFrame:Show()
 end)
 
+MistyUI.silentCheckBtn = CreateFrame("CheckButton", nil, MistyUI.optionsFrame, "UICheckButtonTemplate")
+MistyUI.silentCheckBtn:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT", 10, -100)
+MistyUI.silentCheckBtn.text:SetText("Prevent Misty from adding any messages to the chat frame.")
+MistyUI.silentCheckBtn:SetScript("OnClick", function(self)
+	if MistyUI.silentCheckBtn:GetChecked() then
+		Misty.options.silent = true
+	else
+		Misty.options.silent = false
+	end
+end)
+
 MistyUI.gatherCheckBtn = CreateFrame("CheckButton", nil, MistyUI.optionsFrame, "UICheckButtonTemplate")
-MistyUI.gatherCheckBtn:SetPoint("TOPLEFT", MistyUI.TitleBg, "BOTTOMLEFT", 10, -100)
+MistyUI.gatherCheckBtn:SetPoint("TOPLEFT", MistyUI.silentCheckBtn , "BOTTOMLEFT", 0, -10)
 MistyUI.gatherCheckBtn.text:SetText("Set Misty to gather data from other players upon login.")
 MistyUI.gatherCheckBtn:SetScript("OnClick", function(self)
 	if MistyUI.gatherCheckBtn:GetChecked() then
@@ -744,12 +775,16 @@ function Misty_Event_Handler(self, event, ...)
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_POST)
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_GATHER)
 		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_COLLECT)
+		MistyTbl.vars.prefixReg = RegisterAddonMessagePrefix(MistyTbl.constants.ADDON_PREFIX_LOGOUT)
 		local prefix, message, channel, sender = ...
 		MistyTbl.utils.messageHandler(MistyUI, prefix, message, channel, sender)
 	elseif event == "PLAYER_LOGOUT" then
-		--
+		local class, classFileName = UnitClass("player")
+		local colour = RAID_CLASS_COLORS[classFileName]
+		local formattedClassText = '|cff'..format("%02x%02x%02x", colour.r*255, colour.g*255, colour.b*255)..MistyTbl.vars.playerName..'|r'
+		SendAddonMessage(MistyTbl.constants.ADDON_PREFIX_LOGOUT, formattedClassText, "GUILD")
 	end
 end
 
 MistyUI:SetScript("OnEvent", Misty_Event_Handler)
---MistyUI:Hide()
+MistyUI:Hide()
